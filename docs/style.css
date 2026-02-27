@@ -1,0 +1,469 @@
+*, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --primary: #7c5cfc;
+    --primary-soft: rgba(124, 92, 252, 0.12);
+    --green: #3fb950;
+    --red: #f85149;
+    --text: #e6edf3;
+    --text-sec: #8b949e;
+    --text-muted: #484f58;
+    --radius: 12px;
+    --radius-sm: 8px;
+}
+
+html {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    min-height: 100dvh;
+    padding-bottom: 3rem;
+}
+
+.container {
+    max-width: 540px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+/* ─── Header ─── */
+
+header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13, 17, 23, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 0.85rem 0;
+}
+
+.header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.65rem;
+}
+
+header h1 {
+    font-size: 1.3rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--primary);
+}
+
+.subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+/* ─── Select ─── */
+
+.select-wrap {
+    position: relative;
+}
+
+.select-wrap::after {
+    content: "▾";
+    position: absolute;
+    right: 0.85rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    pointer-events: none;
+    font-size: 0.9rem;
+}
+
+.select-wrap select {
+    width: 100%;
+    padding: 0.7rem 2.2rem 0.7rem 0.85rem;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 0.95rem;
+    font-family: inherit;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.select-wrap select:focus {
+    border-color: var(--primary);
+}
+
+/* ─── Toggle group (segmented control) ─── */
+
+.toggle-group {
+    display: flex;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 2px;
+    margin-bottom: 0.85rem;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 0.45rem 0.6rem;
+    border: none;
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 0.78rem;
+    font-weight: 600;
+    font-family: inherit;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+}
+
+.toggle-btn.active {
+    background: var(--primary);
+    color: #fff;
+}
+
+.toggle-btn:not(.active):hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+/* ─── Card ─── */
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.15rem;
+    margin-top: 1rem;
+}
+
+.card h2 {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 0.85rem;
+}
+
+.section-subtitle {
+    font-size: 0.82rem;
+    color: var(--text-sec);
+    margin: -0.5rem 0 0.85rem;
+}
+
+/* ─── Exercise card ─── */
+
+.ex-card {
+    background: var(--bg);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem;
+    margin-bottom: 0.6rem;
+}
+
+.ex-card:last-child {
+    margin-bottom: 0;
+}
+
+.ex-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 0.3rem;
+}
+
+.ex-name {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--primary);
+}
+
+.ex-date {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.1rem;
+}
+
+/* Info button */
+
+.info-btn {
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-sec);
+    font-size: 0.75rem;
+    font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s;
+}
+
+.info-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+}
+
+/* Hero weight */
+
+.ex-hero {
+    text-align: center;
+    padding: 0.35rem 0 0.55rem;
+}
+
+.ex-weight {
+    font-size: 1.7rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.ex-weight-lbl {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 0.05rem;
+}
+
+/* Stat pills */
+
+.ex-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.stat {
+    flex: 1 0 65px;
+    text-align: center;
+    background: var(--surface);
+    border-radius: 6px;
+    padding: 0.35rem 0.2rem;
+}
+
+.stat-val {
+    font-size: 0.9rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-lbl {
+    font-size: 0.58rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 0.05rem;
+}
+
+.ex-secondary {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-sec);
+    margin-top: 0.45rem;
+}
+
+.ex-notes {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--text-sec);
+    font-style: italic;
+    line-height: 1.35;
+}
+
+/* Color coding */
+
+.change-up {
+    color: var(--green);
+}
+
+.change-down {
+    color: var(--red);
+}
+
+/* ─── Chart ─── */
+
+.chart-toggle {
+    margin-bottom: 0.6rem;
+}
+
+#chart-container {
+    position: relative;
+    height: 240px;
+}
+
+/* ─── History table ─── */
+
+.h-row {
+    display: grid;
+    grid-template-columns: 68px 1fr 54px 28px;
+    gap: 0.3rem;
+    padding: 0.55rem 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.8rem;
+    align-items: center;
+}
+
+.h-row:last-child {
+    border-bottom: none;
+}
+
+.h-head {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 700;
+    padding-bottom: 0.2rem;
+}
+
+.h-date {
+    color: var(--text-sec);
+}
+
+.h-detail {
+    font-variant-numeric: tabular-nums;
+}
+
+.h-e1rm {
+    text-align: right;
+    font-weight: 700;
+    color: var(--primary);
+    font-variant-numeric: tabular-nums;
+}
+
+.h-info {
+    text-align: center;
+}
+
+.h-info .info-btn {
+    width: 22px;
+    height: 22px;
+    font-size: 0.65rem;
+}
+
+.h-notes {
+    grid-column: 1 / -1;
+    font-size: 0.72rem;
+    color: var(--text-sec);
+    font-style: italic;
+    padding: 0 0 0.15rem;
+    line-height: 1.3;
+}
+
+/* ─── Modal (bottom sheet) ─── */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.modal-sheet {
+    position: relative;
+    width: 100%;
+    max-width: 540px;
+    max-height: 82dvh;
+    overflow-y: auto;
+    background: var(--surface);
+    border-radius: 16px 16px 0 0;
+    padding: 1.15rem;
+    animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+    from { transform: translateY(40px); opacity: 0.5; }
+    to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+#modal-title {
+    font-weight: 700;
+    font-size: 1.05rem;
+    color: var(--primary);
+}
+
+.modal-close {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 1.15rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.35rem 1rem;
+    font-size: 0.85rem;
+}
+
+.detail-label {
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.detail-value {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    word-break: break-word;
+}
+
+/* ─── Utilities ─── */
+
+.hidden {
+    display: none !important;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 1.5rem 0.5rem;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+}
