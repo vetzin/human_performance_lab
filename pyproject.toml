@@ -1,0 +1,22 @@
+[tool.poetry]
+package-mode = false
+
+[project]
+name = "human-performance-lab"
+version = "0.1.0"
+description = "Human Performance Lab"
+authors = [
+    {name = "VeniJeen",email = "37582634+VeniJeen@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "pandas>=2.2.0",
+    "ipykernel>=6.0",
+    "openpyxl>=3.1.0",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
