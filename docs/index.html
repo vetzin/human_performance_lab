@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1117">
+    <title>Human Performance Lab</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-row">
+                <h1>HPL</h1>
+                <span class="subtitle">Human Performance Lab</span>
+            </div>
+            <div class="select-wrap">
+                <select id="athlete-select">
+                    <option value="">Select Athlete</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section id="today-section" class="card hidden">
+            <h2 id="today-title"></h2>
+            <div id="today-subtitle" class="section-subtitle hidden"></div>
+            <div id="today-toggle"></div>
+            <div id="today-exercises"></div>
+        </section>
+
+        <section id="progression-section" class="card hidden">
+            <h2>Exercise Progression</h2>
+            <div class="select-wrap">
+                <select id="exercise-select">
+                    <option value="">Select Exercise</option>
+                </select>
+            </div>
+            <div id="chart-area" class="hidden">
+                <div class="toggle-group chart-toggle">
+                    <button class="toggle-btn active" data-metric="load_avg">Avg Load</button>
+                    <button class="toggle-btn" data-metric="total_volume">Total Volume</button>
+                </div>
+                <div id="chart-container">
+                    <canvas id="progression-chart"></canvas>
+                </div>
+            </div>
+            <div id="history-table"></div>
+        </section>
+    </main>
+
+    <div id="detail-modal" class="modal hidden">
+        <div class="modal-backdrop"></div>
+        <div class="modal-sheet">
+            <div class="modal-head">
+                <span id="modal-title"></span>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
