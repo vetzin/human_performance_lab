@@ -6,6 +6,7 @@ let athlete = "";
 let exercise = "";
 let chartMetric = "load_avg";
 let todayMode = "top";
+let cardsExpanded = false;
 
 const $id = (id) => document.getElementById(id);
 const $athlete = $id("athlete-select");
@@ -41,6 +42,7 @@ function onAthleteChange() {
     athlete = $athlete.value;
     exercise = "";
     chartMetric = "load_avg";
+    cardsExpanded = false;
     $exercise.value = "";
     $id("chart-area").classList.add("hidden");
     $id("history-table").innerHTML = "";
@@ -51,9 +53,23 @@ function onAthleteChange() {
         return;
     }
 
-    renderToday();
     fillExercises();
+    renderToday();
     $id("progression-section").classList.remove("hidden");
+}
+
+/* ════════════════════════════════════════════
+   Navigate to exercise progression
+   ════════════════════════════════════════════ */
+
+function navigateToExercise(name) {
+    exercise = name;
+    $exercise.value = name;
+    chartMetric = "load_avg";
+    syncChartToggle();
+    renderChart();
+    renderHistory();
+    $id("progression-section").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ════════════════════════════════════════════
@@ -78,7 +94,7 @@ function renderToday() {
         $title.textContent = `Last ${today} — ${fmtDate(lastDate)}`;
         $sub.classList.add("hidden");
         $toggle.innerHTML = "";
-        $cards.innerHTML = session.map((r) => buildCard(r)).join("");
+        $cards.innerHTML = session.map((r) => buildCard(r, all)).join("");
     } else {
         $title.textContent = `${today} — No session recorded`;
         renderFallback(all, $sub, $toggle, $cards);
@@ -114,21 +130,27 @@ function buildTopCards(rows) {
         counts[r.exercise] = (counts[r.exercise] || 0) + 1;
     });
 
-    const top5 = Object.entries(counts)
+    const top10 = Object.entries(counts)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
+        .slice(0, 10)
         .map(([name]) => name);
 
-    if (!top5.length) return '<div class="empty-state">No data yet</div>';
+    if (!top10.length) return '<div class="empty-state">No data yet</div>';
 
-    return top5
-        .map((exName) => {
-            const latest = rows
-                .filter((r) => r.exercise === exName)
-                .sort((a, b) => b.date_only.localeCompare(a.date_only))[0];
-            return buildCard(latest);
-        })
-        .join("");
+    const cards = top10.map((exName) => {
+        const latest = rows
+            .filter((r) => r.exercise === exName)
+            .sort((a, b) => b.date_only.localeCompare(a.date_only))[0];
+        return buildCard(latest, rows);
+    });
+
+    const VISIBLE = 5;
+    if (cards.length <= VISIBLE || cardsExpanded) {
+        return cards.join("");
+    }
+
+    return `<div class="cards-scroll collapsed" id="cards-scroll">${cards.join("")}</div>
+        <button class="show-more-btn" id="show-more">Show ${cards.length - VISIBLE} more exercises</button>`;
 }
 
 function buildLastWorkoutCards(rows) {
@@ -140,40 +162,57 @@ function buildLastWorkoutCards(rows) {
     const day = session[0].day_of_week;
 
     return {
-        html: session.map((r) => buildCard(r)).join(""),
+        html: session.map((r) => buildCard(r, rows)).join(""),
         subtitle: `${fmtDate(lastDate)} — ${day}`,
     };
 }
 
 /* ════════════════════════════════════════════
-   Exercise card
+   Exercise card (with sparklines & % badge)
    ════════════════════════════════════════════ */
 
-function buildCard(row) {
-    const prev = findPrevSession(row.exercise, row.date_only);
-    const diff = getDiff(row.load_avg, prev?.load_avg);
+function buildCard(row, allRows) {
+    const exRows = (allRows || data.filter((r) => r.athlete === athlete))
+        .filter((r) => r.exercise === row.exercise)
+        .sort((a, b) => a.date_only.localeCompare(b.date_only));
+
+    const pctBadge = buildPctBadge(exRows, row);
+    const sparkLoad = buildSparkline(exRows, "load_avg", "#7c5cfc");
+    const sparkVol = buildSparkline(exRows, "total_volume", "#3fb950");
 
     const weightText =
-        row.load_avg != null ? fmtNum(row.load_avg) + " kg" + diff.arrow : "—";
+        row.load_avg != null ? fmtNum(row.load_avg) + " kg" : "\u2014";
+
+    const setsReps = `${row.sets}\u00D7${fmtNum(row.reps_avg)}`;
+    const totalReps = row.reps_total != null ? fmtNum(row.reps_total) : null;
 
     const stats = [];
-    stats.push(mkStat(`${row.sets}\u00D7${fmtNum(row.reps_avg)}`, "Sets\u00D7Reps"));
-    if (row.reps_total != null) stats.push(mkStat(fmtNum(row.reps_total), "Total Reps"));
     if (row.total_volume != null) stats.push(mkStat(fmtNum(row.total_volume), "Volume"));
     if (row.rpe != null) stats.push(mkStat(row.rpe, "RPE"));
 
     return `<div class="ex-card">
         <div class="ex-header">
             <div>
-                <div class="ex-name">${esc(row.exercise)}</div>
-                <div class="ex-date">${fmtDate(row.date_only)} · ${row.day_of_week}</div>
+                <div class="ex-name" data-exercise="${esc(row.exercise)}">${esc(row.exercise)}</div>
+                <div class="ex-date">${fmtDate(row.date_only)} \u00B7 ${row.day_of_week}</div>
             </div>
             <button class="info-btn" data-row-id="${row.row_id}">i</button>
         </div>
+        <div class="ex-reps-row">
+            <span class="reps-big">${setsReps}<span class="reps-lbl">sets\u00D7reps</span></span>
+            ${totalReps ? `<span class="reps-big">${totalReps}<span class="reps-lbl">total</span></span>` : ""}
+        </div>
         <div class="ex-hero">
-            <span class="ex-weight ${diff.cls}">${weightText}</span>
+            <div class="ex-weight-row">
+                <span class="ex-weight">${weightText}</span>
+                ${pctBadge}
+            </div>
             <span class="ex-weight-lbl">avg load</span>
         </div>
+        ${exRows.length >= 2 ? `<div class="sparkline-row">
+            <div class="sparkline-box"><div class="sparkline-label">Avg Load</div>${sparkLoad}</div>
+            <div class="sparkline-box"><div class="sparkline-label">Volume</div>${sparkVol}</div>
+        </div>` : ""}
         <div class="ex-stats">${stats.join("")}</div>
         ${row.e1rm_avg != null ? `<div class="ex-secondary">e1RM ${fmtNum(row.e1rm_avg)} kg</div>` : ""}
         ${row.notes ? `<div class="ex-notes">${esc(row.notes)}</div>` : ""}
@@ -184,25 +223,76 @@ function mkStat(val, label) {
     return `<div class="stat"><div class="stat-val">${val}</div><div class="stat-lbl">${label}</div></div>`;
 }
 
-function findPrevSession(exerciseName, beforeDate) {
-    return (
-        data
-            .filter(
-                (r) =>
-                    r.athlete === athlete &&
-                    r.exercise === exerciseName &&
-                    r.date_only < beforeDate
-            )
-            .sort((a, b) => b.date_only.localeCompare(a.date_only))[0] || null
-    );
+/* ════════════════════════════════════════════
+   % improvement (rolling weekly average)
+   ════════════════════════════════════════════ */
+
+function buildPctBadge(exRows, currentRow) {
+    const withLoad = exRows.filter((r) => r.load_avg != null);
+    if (withLoad.length < 2) return "";
+
+    const currentIdx = withLoad.findIndex((r) => r.row_id === currentRow.row_id);
+    if (currentIdx < 1) return "";
+
+    const currentWeek = currentRow.week_num;
+    const thisWeekRows = withLoad.filter((r) => r.week_num === currentWeek);
+    const prevWeekRows = withLoad.filter((r) => r.week_num === currentWeek - 1);
+
+    let thisAvg, prevAvg;
+
+    if (thisWeekRows.length > 0 && prevWeekRows.length > 0) {
+        thisAvg = avg(thisWeekRows.map((r) => r.load_avg));
+        prevAvg = avg(prevWeekRows.map((r) => r.load_avg));
+    } else {
+        thisAvg = currentRow.load_avg;
+        prevAvg = withLoad[currentIdx - 1].load_avg;
+    }
+
+    if (prevAvg === 0 || prevAvg == null) return "";
+
+    const pct = ((thisAvg - prevAvg) / prevAvg) * 100;
+    const rounded = Math.abs(pct) < 0.5 ? 0 : parseFloat(pct.toFixed(1));
+
+    if (rounded === 0) return `<span class="pct-badge flat">0%</span>`;
+    if (rounded > 0) return `<span class="pct-badge up">+${rounded}%</span>`;
+    return `<span class="pct-badge down">${rounded}%</span>`;
 }
 
-function getDiff(current, previous) {
-    if (current == null || previous == null) return { cls: "", arrow: "" };
-    const d = current - previous;
-    if (d > 0) return { cls: "change-up", arrow: " \u2191" };
-    if (d < 0) return { cls: "change-down", arrow: " \u2193" };
-    return { cls: "", arrow: "" };
+function avg(arr) {
+    return arr.reduce((s, v) => s + v, 0) / arr.length;
+}
+
+/* ════════════════════════════════════════════
+   SVG sparklines
+   ════════════════════════════════════════════ */
+
+function buildSparkline(exRows, field, color) {
+    const values = exRows.map((r) => r[field]).filter((v) => v != null);
+    if (values.length < 2) return '<svg viewBox="0 0 100 28"></svg>';
+
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = max - min || 1;
+    const W = 100;
+    const H = 28;
+    const pad = 2;
+
+    const points = values.map((v, i) => {
+        const x = (i / (values.length - 1)) * W;
+        const y = pad + ((max - v) / range) * (H - pad * 2);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+
+    const last = values[values.length - 1];
+    const prev = values[values.length - 2];
+    const dotColor = last >= prev ? "#3fb950" : "#f85149";
+    const lastX = W;
+    const lastY = pad + ((max - last) / range) * (H - pad * 2);
+
+    return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+        <polyline points="${points.join(" ")}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        <circle cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2.5" fill="${dotColor}" />
+    </svg>`;
 }
 
 /* ════════════════════════════════════════════
@@ -419,6 +509,12 @@ function renderHistory() {
    ════════════════════════════════════════════ */
 
 function onGlobalClick(e) {
+    const exName = e.target.closest(".ex-name");
+    if (exName) {
+        navigateToExercise(exName.dataset.exercise);
+        return;
+    }
+
     const info = e.target.closest(".info-btn");
     if (info) {
         showDetail(Number(info.dataset.rowId));
@@ -433,7 +529,17 @@ function onGlobalClick(e) {
     const viewBtn = e.target.closest(".view-btn");
     if (viewBtn) {
         todayMode = viewBtn.dataset.view;
+        cardsExpanded = false;
         renderToday();
+        return;
+    }
+
+    const showMore = e.target.closest("#show-more");
+    if (showMore) {
+        cardsExpanded = true;
+        const scroll = $id("cards-scroll");
+        if (scroll) scroll.classList.remove("collapsed");
+        showMore.remove();
         return;
     }
 
