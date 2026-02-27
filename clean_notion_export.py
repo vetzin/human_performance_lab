@@ -7,8 +7,11 @@ Output: data/clean_data.csv
 Pipeline:
 1. Normalize headers, drop empty rows (no exercise)
 2. Parse dates, load, reps with per-set handling
-3. Cross-reference load/reps/sets — expand single values to match multi
-4. Compute 1RM estimates (Epley, Brzycki, Lombardi) + average
+3. Always expand per-set strings — single values fill across all sets
+4. RPE-adjusted 1RM via Reps-In-Reserve (RIR) method (Zourdos et al., 2016)
+   - RIR = 10 - RPE; if RPE missing, assume RPE 9 (RIR=1, not stored)
+   - Effective reps = actual_reps + RIR for 1RM estimation
+   - Average of Epley, Brzycki, Lombardi formulas; best set taken
 5. Compute total volume, session IDs, data quality flags
 6. Export clean CSV
 """
@@ -19,6 +22,7 @@ from pathlib import Path
 
 MAX_SANE_REPS = 100
 MAX_SANE_LOAD = 600
+DEFAULT_RPE = 9.0   # assumed when RPE not recorded — never written to output
 
 
 # ---------------------------------------------------------------------------
@@ -28,8 +32,8 @@ MAX_SANE_LOAD = 600
 def parse_values(raw, max_sane: float | None = None) -> list[float]:
     """Parse raw cell into a list of floats.
 
-    Handles: single numbers, 'Nkg' suffixes, comma / hyphen / space separated
-    lists. Returns empty list for unparseable or missing values.
+    Handles single numbers, 'Nkg' suffixes, comma / hyphen / space lists.
+    Returns [] for unparseable or missing values.
     """
     if pd.isna(raw):
         return []
@@ -60,51 +64,64 @@ def fmt_val(v: float) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 1-Rep-Max estimation formulas
+# RPE-adjusted 1RM
 # ---------------------------------------------------------------------------
+# Source: Zourdos MC, et al. (2016). A Novel Percent 1-RM Algorithm for
+# Resistance Exercise Based on the Repetitions-in-Reserve (RIR) Continuum.
+# J Strength Cond Res, 30(1):267-275.
+#
+# Principle: RPE on the 0-10 scale implies RIR = 10 - RPE.
+# Adding RIR to actual reps gives the *estimated* maximum reps possible at
+# that load, which feeds standard load-reps 1RM formulas far more accurately
+# than raw reps alone (which would underestimate 1RM for sub-maximal sets).
+
+def _rpe_to_rir(rpe: float | None) -> float:
+    """Reps In Reserve from RPE. Falls back to DEFAULT_RPE silently."""
+    effective_rpe = rpe if (rpe is not None and not pd.isna(rpe)) else DEFAULT_RPE
+    effective_rpe = max(1.0, min(10.0, effective_rpe))
+    return 10.0 - effective_rpe
+
 
 def _e1rm_epley(w: float, r: float) -> float | None:
-    """Epley: W × (1 + r/30)"""
     if w <= 0 or r <= 0:
         return None
     return w if r == 1 else round(w * (1 + r / 30), 1)
 
 
 def _e1rm_brzycki(w: float, r: float) -> float | None:
-    """Brzycki: W × 36 / (37 − r)  (valid for r < 37)"""
-    if w <= 0 or r <= 0:
+    if w <= 0 or r <= 0 or r >= 37:
         return None
-    if r == 1:
-        return w
-    if r >= 37:
-        return None
-    return round(w * 36 / (37 - r), 1)
+    return w if r == 1 else round(w * 36 / (37 - r), 1)
 
 
 def _e1rm_lombardi(w: float, r: float) -> float | None:
-    """Lombardi: W × r^0.10"""
     if w <= 0 or r <= 0:
         return None
     return w if r == 1 else round(w * (r ** 0.10), 1)
 
 
-_E1RM_FNS = [
-    ("epley", _e1rm_epley),
-    ("brzycki", _e1rm_brzycki),
-    ("lombardi", _e1rm_lombardi),
-]
+_E1RM_FNS = [_e1rm_epley, _e1rm_brzycki, _e1rm_lombardi]
 
 
-def best_e1rm(load_vals: list[float], reps_vals: list[float]) -> dict:
-    """Best (max) estimated 1RM across all set pairs, plus average."""
-    best: dict[str, float | None] = {k: None for k, _ in _E1RM_FNS}
+def compute_e1rm_avg(load_vals: list[float], reps_vals: list[float], rpe: float | None) -> float | None:
+    """Best RPE-adjusted estimated 1RM across all sets, averaged over three formulas.
+
+    For each set pair (load, reps) the effective reps = reps + RIR (Zourdos 2016).
+    Best set (highest estimate) is selected; Epley/Brzycki/Lombardi are averaged.
+    """
+    if not load_vals or not reps_vals:
+        return None
+    rir = _rpe_to_rir(rpe)
+    best: float | None = None
     for w, r in zip(load_vals, reps_vals):
-        for key, fn in _E1RM_FNS:
-            val = fn(w, r)
-            if val is not None and (best[key] is None or val > best[key]):
-                best[key] = val
-    vals = [v for v in best.values() if v is not None]
-    best["avg"] = round(sum(vals) / len(vals), 1) if vals else None
+        eff_r = r + rir
+        estimates = [fn(w, eff_r) for fn in _E1RM_FNS]
+        estimates = [v for v in estimates if v is not None]
+        if not estimates:
+            continue
+        candidate = round(sum(estimates) / len(estimates), 1)
+        if best is None or candidate > best:
+            best = candidate
     return best
 
 
@@ -112,20 +129,17 @@ def best_e1rm(load_vals: list[float], reps_vals: list[float]) -> dict:
 # Row-level cleaning
 # ---------------------------------------------------------------------------
 
-def clean_row(raw_load, raw_reps, raw_sets) -> dict:
-    """Parse and cross-reference load / reps / sets for one exercise row."""
+def clean_row(raw_load, raw_reps, raw_sets, raw_rpe) -> dict:
+    """Parse and cross-reference load / reps / sets / rpe for one exercise row."""
     load_vals = parse_values(raw_load, max_sane=MAX_SANE_LOAD)
     reps_vals = parse_values(raw_reps, max_sane=MAX_SANE_REPS)
     sets_raw = int(float(raw_sets)) if pd.notna(raw_sets) else None
+    rpe = float(raw_rpe) if pd.notna(raw_rpe) else None
 
     num_sets = max(len(load_vals), len(reps_vals), sets_raw or 0) or None
 
-    load_is_multi = len(load_vals) > 1
-    reps_is_multi = len(reps_vals) > 1
-    either_multi = load_is_multi or reps_is_multi
-
-    # Expand single side to match multi side
-    if either_multi and num_sets and num_sets > 1:
+    # Expand single-value sides to fill all sets (always, not just when the other is multi)
+    if num_sets and num_sets > 1:
         if len(load_vals) == 1:
             load_vals = load_vals * num_sets
         if len(reps_vals) == 1:
@@ -139,23 +153,23 @@ def clean_row(raw_load, raw_reps, raw_sets) -> dict:
         while len(reps_vals) < target:
             reps_vals.append(reps_vals[-1])
 
-    # --- Load ---
-    load_per_set = (
-        ",".join(fmt_val(v) for v in load_vals) if len(load_vals) > 1 else None
-    )
-    load_avg = round(sum(load_vals) / len(load_vals), 1) if load_vals else None
-    load_min = min(load_vals) if load_vals else None
-    load_max = max(load_vals) if load_vals else None
+    # --- Load per set (always populated when sets >= 1 and load available) ---
+    if load_vals:
+        load_per_set = ",".join(fmt_val(v) for v in load_vals)
+        load_avg = round(sum(load_vals) / len(load_vals), 1)
+        load_min = min(load_vals)
+        load_max = max(load_vals)
+    else:
+        load_per_set = None
+        load_avg = None
+        load_min = None
+        load_max = None
 
-    # --- Reps ---
-    if either_multi and len(reps_vals) > 1:
+    # --- Reps per set (always populated when sets >= 1 and reps available) ---
+    if reps_vals:
         reps_per_set = ",".join(fmt_val(v) for v in reps_vals)
-        reps_total = sum(reps_vals)
-        reps_avg = round(reps_total / len(reps_vals), 1)
-    elif reps_vals:
-        reps_per_set = None
-        reps_total = reps_vals[0] * (num_sets or 1)
-        reps_avg = reps_vals[0]
+        reps_total = int(sum(reps_vals))
+        reps_avg = round(sum(reps_vals) / len(reps_vals), 1)
     else:
         reps_per_set = None
         reps_total = None
@@ -164,15 +178,15 @@ def clean_row(raw_load, raw_reps, raw_sets) -> dict:
     sets = num_sets
 
     # --- Volume = Σ(load_i × reps_i) across all sets ---
-    if load_vals and reps_vals and len(load_vals) == len(reps_vals) and len(load_vals) > 1:
+    if load_vals and reps_vals and len(load_vals) == len(reps_vals):
         volume = round(sum(w * r for w, r in zip(load_vals, reps_vals)), 1)
     elif load_avg is not None and reps_total is not None:
         volume = round(load_avg * reps_total, 1)
     else:
         volume = None
 
-    # --- 1RM ---
-    e1rm = best_e1rm(load_vals, reps_vals) if load_vals and reps_vals else {}
+    # --- RPE-adjusted 1RM ---
+    e1rm_avg = compute_e1rm_avg(load_vals, reps_vals, rpe)
 
     # --- Data quality flags ---
     flags: list[str] = []
@@ -182,9 +196,9 @@ def clean_row(raw_load, raw_reps, raw_sets) -> dict:
         flags.append("unparseable_load")
     if raw_reps_str and not reps_vals:
         flags.append("unparseable_reps")
-    if not raw_load_str and not load_vals:
+    if not raw_load_str:
         flags.append("missing_load")
-    if not raw_reps_str and not reps_vals:
+    if not raw_reps_str:
         flags.append("missing_reps")
     orig_load_len = len(parse_values(raw_load, MAX_SANE_LOAD))
     orig_reps_len = len(parse_values(raw_reps, MAX_SANE_REPS))
@@ -195,18 +209,15 @@ def clean_row(raw_load, raw_reps, raw_sets) -> dict:
 
     return {
         "sets": int(sets) if sets else None,
-        "load_per_set": load_per_set,
+        "reps_avg": reps_avg,
         "load_avg": load_avg,
+        "reps_per_set": reps_per_set,
+        "load_per_set": load_per_set,
+        "reps_total": reps_total,
+        "total_volume": volume,
         "load_min": load_min,
         "load_max": load_max,
-        "reps_per_set": reps_per_set,
-        "reps_avg": reps_avg,
-        "reps_total": int(reps_total) if reps_total is not None else None,
-        "total_volume": volume,
-        "e1rm_epley": e1rm.get("epley"),
-        "e1rm_brzycki": e1rm.get("brzycki"),
-        "e1rm_lombardi": e1rm.get("lombardi"),
-        "e1rm_avg": e1rm.get("avg"),
+        "e1rm_avg": e1rm_avg,
         "data_quality_flag": "|".join(flags) if flags else None,
     }
 
@@ -228,7 +239,7 @@ def main():
     # 2. Drop rows with no exercise (empty Notion rows)
     df = df.dropna(subset=["exercise"]).reset_index(drop=True)
 
-    # 3. Athlete name (strip whitespace), drop original "name"
+    # 3. Athlete name
     df["athlete"] = df["created_by"].str.strip()
 
     # 4. Dates
@@ -237,12 +248,12 @@ def main():
     df["day_of_week"] = df["date"].dt.day_name()
     df["date"] = df["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # 5. Exercise name cleanup (strip whitespace)
+    # 5. Exercise name cleanup
     df["exercise"] = df["exercise"].str.strip()
 
-    # 6. Process load / reps / sets
+    # 6. Process load / reps / sets / rpe
     cleaned = df.apply(
-        lambda r: clean_row(r["load"], r["reps"], r["sets"]),
+        lambda r: clean_row(r["load"], r["reps"], r["sets"], r["rpe"]),
         axis=1,
         result_type="expand",
     )
@@ -260,32 +271,29 @@ def main():
     df = df.sort_values(["date", "athlete", "exercise"]).reset_index(drop=True)
     df["row_id"] = range(1, len(df) + 1)
 
-    # 9. Select output columns
+    # 9. Column order: context → metrics → extras → IDs
     out_cols = [
-        "row_id",
-        "session_id",
-        "athlete",
-        "date",
         "date_only",
         "day_of_week",
-        "week_num",
+        "athlete",
         "exercise",
         "sets",
-        "load_per_set",
+        "reps_avg",
         "load_avg",
+        "reps_per_set",
+        "load_per_set",
+        "reps_total",
+        "total_volume",
         "load_min",
         "load_max",
-        "reps_per_set",
-        "reps_avg",
-        "reps_total",
         "rpe",
-        "e1rm_epley",
-        "e1rm_brzycki",
-        "e1rm_lombardi",
         "e1rm_avg",
-        "total_volume",
+        "week_num",
         "notes",
         "data_quality_flag",
+        "date",
+        "session_id",
+        "row_id",
     ]
     result = df[[c for c in out_cols if c in df.columns]]
 
