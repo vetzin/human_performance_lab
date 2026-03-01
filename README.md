@@ -35,3 +35,10 @@ If you prefer to export from Notion by hand:
    python -m http.server 8080 -d docs
    ```
 4. Open **http://localhost:8080** in your browser.
+
+## Update the live site (sync and push to GitHub)
+
+To refresh the dashboard data from Notion and push it to GitHub (so the hosted page updates):
+
+- **Windows:** Double-click `sync_and_push.bat`, or run it from a terminal. It runs the Notion sync, then commits and pushes `docs/data.json` if it changed.
+- Ensure Git is configured (remote, branch, credentials). If nothing changed, the script will report "Nothing to commit."
