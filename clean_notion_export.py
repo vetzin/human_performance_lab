@@ -226,21 +226,24 @@ def clean_row(raw_load, raw_reps, raw_sets, raw_rpe) -> dict:
 # Main pipeline
 # ---------------------------------------------------------------------------
 
-def main():
-    data_dir = Path(__file__).resolve().parent / "data"
-    input_path = data_dir / "notion_export.xlsx"
-    output_path = data_dir / "clean_data.csv"
+def clean_export_df(df: pd.DataFrame) -> pd.DataFrame:
+    """Run the full cleaning pipeline on a DataFrame (no file I/O).
 
-    df = pd.read_excel(input_path)
-
+    Expects columns compatible with Notion export: exercise, created_by,
+    created_time, load, reps, sets, rpe, and optionally week_num, notes.
+    Returns the cleaned DataFrame with standard column order.
+    """
     # 1. Normalize headers
-    df.columns = [re.sub(r"\s+", "_", c.strip().lower()) for c in df.columns]
+    df = df.copy()
+    df.columns = [re.sub(r"\s+", "_", str(c).strip().lower()) for c in df.columns]
 
     # 2. Drop rows with no exercise (empty Notion rows)
     df = df.dropna(subset=["exercise"]).reset_index(drop=True)
+    if df.empty:
+        return df
 
     # 3. Athlete name
-    df["athlete"] = df["created_by"].str.strip()
+    df["athlete"] = df["created_by"].astype(str).str.strip()
 
     # 4. Dates
     df["date"] = pd.to_datetime(df["created_time"], format="mixed", errors="coerce")
@@ -249,9 +252,12 @@ def main():
     df["date"] = df["date"].dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # 5. Exercise name cleanup
-    df["exercise"] = df["exercise"].str.strip()
+    df["exercise"] = df["exercise"].astype(str).str.strip()
 
-    # 6. Process load / reps / sets / rpe
+    # 6. Process load / reps / sets / rpe (ensure columns exist for apply)
+    for col in ("load", "reps", "sets", "rpe"):
+        if col not in df.columns:
+            df[col] = None
     cleaned = df.apply(
         lambda r: clean_row(r["load"], r["reps"], r["sets"], r["rpe"]),
         axis=1,
@@ -295,8 +301,16 @@ def main():
         "session_id",
         "row_id",
     ]
-    result = df[[c for c in out_cols if c in df.columns]]
+    return df[[c for c in out_cols if c in df.columns]]
 
+
+def main():
+    data_dir = Path(__file__).resolve().parent / "data"
+    input_path = data_dir / "notion_export.xlsx"
+    output_path = data_dir / "clean_data.csv"
+
+    df = pd.read_excel(input_path)
+    result = clean_export_df(df)
     result.to_csv(output_path, index=False, encoding="utf-8")
     print(f"Wrote {result.shape[0]} rows x {result.shape[1]} cols -> {output_path}")
     return result
